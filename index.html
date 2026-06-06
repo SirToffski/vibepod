@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VibePod: Mistral Vibe on a HomePod</title>
+<meta name="description" content="VibePod is a little bridge that lets you talk to a Mistral Vibe agent through an Apple HomePod. Built in an afternoon, with Claude doing most of the heavy lifting. Here's how, and what it cost (almost nothing).">
+<meta property="og:title" content="VibePod: Mistral Vibe on a HomePod">
+<meta property="og:description" content="A HomePod-to-Mistral-Vibe voice bridge, built in an afternoon. Here's how it works and the token rabbit hole I fell down.">
+<meta property="og:type" content="article">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400..700;1,9..144,400..600&family=Hanken+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+
+<style>
+  :root{
+    --bg:#15120e;
+    --bg-2:#1d1813;
+    --surface:#211b15;
+    --ink:#ece4d8;
+    --ink-soft:#b8ad9d;
+    --ink-faint:#8a8071;
+    --line:#332b22;
+    --amber:#f0a14f;
+    --amber-bright:#ffb866;
+    --coral:#e8794e;
+    --code-bg:#171310;
+    --max:46rem;
+  }
+
+  *{box-sizing:border-box;}
+
+  html{scroll-behavior:smooth;}
+
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--ink);
+    font-family:"Hanken Grotesk",system-ui,sans-serif;
+    font-size:18px;
+    line-height:1.72;
+    -webkit-font-smoothing:antialiased;
+    overflow-x:hidden;
+  }
+
+  /* warm grain + glow atmosphere */
+  body::before{
+    content:"";
+    position:fixed; inset:0;
+    background:
+      radial-gradient(60rem 32rem at 50% -8rem, rgba(240,161,79,0.16), transparent 70%),
+      radial-gradient(40rem 40rem at 88% 12%, rgba(232,121,78,0.07), transparent 70%);
+    pointer-events:none;
+    z-index:0;
+  }
+  body::after{
+    content:"";
+    position:fixed; inset:0;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.035'/%3E%3C/svg%3E");
+    pointer-events:none;
+    z-index:0;
+    mix-blend-mode:overlay;
+  }
+
+  .wrap{
+    position:relative;
+    z-index:1;
+    max-width:var(--max);
+    margin:0 auto;
+    padding:0 1.5rem 6rem;
+  }
+
+  /* ---- hero ---- */
+  header.hero{
+    position:relative;
+    z-index:1;
+    max-width:var(--max);
+    margin:0 auto;
+    padding:5.5rem 1.5rem 2.5rem;
+    text-align:center;
+  }
+
+  .glow-ring{
+    width:88px; height:88px;
+    margin:0 auto 2rem;
+    border-radius:50%;
+    background:radial-gradient(circle at 50% 50%, var(--amber-bright), var(--coral) 60%, transparent 72%);
+    box-shadow:0 0 48px 8px rgba(240,161,79,0.35);
+    animation:pulse 3.4s ease-in-out infinite;
+    opacity:0;
+    animation:fadeUp .8s ease .1s forwards, pulse 3.4s ease-in-out 1s infinite;
+  }
+  @keyframes pulse{
+    0%,100%{transform:scale(1);box-shadow:0 0 48px 8px rgba(240,161,79,0.30);}
+    50%{transform:scale(1.07);box-shadow:0 0 62px 14px rgba(240,161,79,0.45);}
+  }
+
+  .kicker{
+    font-family:"JetBrains Mono",monospace;
+    font-size:.74rem;
+    letter-spacing:.32em;
+    text-transform:uppercase;
+    color:var(--amber);
+    margin-bottom:1.1rem;
+    opacity:0; animation:fadeUp .8s ease .2s forwards;
+  }
+
+  h1{
+    font-family:"Fraunces",serif;
+    font-weight:600;
+    font-size:clamp(2.7rem,8vw,4.6rem);
+    line-height:0.98;
+    letter-spacing:-0.015em;
+    margin:0 0 1.1rem;
+    opacity:0; animation:fadeUp .8s ease .3s forwards;
+  }
+  h1 em{font-style:italic;color:var(--amber-bright);}
+
+  .dek{
+    font-size:1.2rem;
+    color:var(--ink-soft);
+    max-width:34rem;
+    margin:0 auto 1.6rem;
+    opacity:0; animation:fadeUp .8s ease .42s forwards;
+  }
+
+  .byline{
+    font-family:"JetBrains Mono",monospace;
+    font-size:.8rem;
+    color:var(--ink-faint);
+    opacity:0; animation:fadeUp .8s ease .54s forwards;
+  }
+  .byline a{color:var(--ink-soft);}
+
+  @keyframes fadeUp{
+    from{opacity:0;transform:translateY(14px);}
+    to{opacity:1;transform:translateY(0);}
+  }
+
+  /* ---- collab note ---- */
+  .collab{
+    margin:2.5rem auto 0;
+    max-width:var(--max);
+    background:linear-gradient(180deg, rgba(240,161,79,0.08), rgba(240,161,79,0.03));
+    border:1px solid var(--line);
+    border-left:3px solid var(--amber);
+    border-radius:10px;
+    padding:1.1rem 1.4rem;
+    font-size:.98rem;
+    color:var(--ink-soft);
+  }
+  .collab strong{color:var(--ink);font-weight:600;}
+
+  /* ---- body ---- */
+  h2{
+    font-family:"Fraunces",serif;
+    font-weight:600;
+    font-size:1.9rem;
+    letter-spacing:-0.01em;
+    margin:3.2rem 0 0.4rem;
+    color:var(--ink);
+    scroll-margin-top:2rem;
+  }
+  h2 .num{
+    font-family:"JetBrains Mono",monospace;
+    font-size:.9rem;
+    color:var(--amber);
+    margin-right:.7rem;
+    vertical-align:middle;
+  }
+  h3{
+    font-family:"Hanken Grotesk",sans-serif;
+    font-weight:700;
+    font-size:1.12rem;
+    margin:2rem 0 0.2rem;
+    color:var(--amber-bright);
+  }
+
+  p{margin:1rem 0;}
+  a{color:var(--amber);text-decoration:none;border-bottom:1px solid rgba(240,161,79,0.35);transition:color .15s,border-color .15s;}
+  a:hover{color:var(--amber-bright);border-color:var(--amber-bright);}
+
+  strong{color:var(--ink);font-weight:600;}
+  em{color:var(--ink);}
+
+  ul,ol{margin:1rem 0;padding-left:1.3rem;}
+  li{margin:.45rem 0;}
+  li::marker{color:var(--amber);}
+
+  hr{border:none;border-top:1px solid var(--line);margin:3rem 0;}
+
+  blockquote{
+    margin:1.6rem 0;
+    padding:.2rem 0 .2rem 1.3rem;
+    border-left:3px solid var(--coral);
+    color:var(--ink-soft);
+    font-style:italic;
+  }
+
+  /* ---- code ---- */
+  code{
+    font-family:"JetBrains Mono",monospace;
+    font-size:.86em;
+    background:var(--code-bg);
+    border:1px solid var(--line);
+    border-radius:5px;
+    padding:.1em .4em;
+    color:var(--amber-bright);
+  }
+  pre{
+    position:relative;
+    background:var(--code-bg);
+    border:1px solid var(--line);
+    border-radius:11px;
+    padding:1.2rem 1.3rem;
+    overflow-x:auto;
+    margin:1.4rem 0;
+    box-shadow:inset 0 1px 0 rgba(255,255,255,0.02), 0 14px 40px -24px rgba(0,0,0,0.8);
+  }
+  pre code{
+    background:none;border:none;padding:0;color:var(--ink);
+    font-size:.82rem;line-height:1.65;
+  }
+  pre.term::before{
+    content:"● ● ●";
+    display:block;
+    color:#4d4338;
+    letter-spacing:.2em;
+    font-size:.6rem;
+    margin-bottom:.8rem;
+  }
+  .cmt{color:var(--ink-faint);}
+  .amber{color:var(--amber);}
+
+  /* ---- flow diagram ---- */
+  pre.flow{
+    text-align:left;
+    line-height:1.4;
+    font-size:.78rem;
+    color:var(--ink-soft);
+  }
+  pre.flow b{color:var(--amber-bright);font-weight:500;}
+
+  /* ---- token journey ---- */
+  .journey{
+    margin:1.8rem 0;
+    border:1px solid var(--line);
+    border-radius:12px;
+    overflow:hidden;
+    background:var(--surface);
+  }
+  .jrow{
+    display:grid;
+    grid-template-columns:1fr auto;
+    align-items:center;
+    gap:1rem;
+    padding:.85rem 1.2rem;
+    border-bottom:1px solid var(--line);
+  }
+  .jrow:last-child{border-bottom:none;}
+  .jrow .label{font-size:.9rem;color:var(--ink-soft);}
+  .jrow .bar{
+    height:10px;border-radius:6px;
+    background:linear-gradient(90deg,var(--coral),var(--amber));
+    margin-top:.35rem;
+  }
+  .jrow .tok{
+    font-family:"JetBrains Mono",monospace;
+    font-size:1rem;font-weight:700;color:var(--ink);
+    white-space:nowrap;
+  }
+  .jrow.win{background:linear-gradient(90deg, rgba(240,161,79,0.10), transparent);}
+  .jrow.win .tok{color:var(--amber-bright);}
+  .jrow.bad .tok{color:var(--coral);}
+
+  .statline{
+    display:flex;flex-wrap:wrap;gap:1.5rem;justify-content:center;
+    margin:2rem 0;padding:1.4rem;
+    border:1px solid var(--line);border-radius:12px;
+    background:linear-gradient(180deg,var(--bg-2),var(--surface));
+  }
+  .stat{text-align:center;}
+  .stat .big{
+    font-family:"Fraunces",serif;font-weight:600;
+    font-size:2.1rem;color:var(--amber-bright);line-height:1;
+  }
+  .stat .cap{font-family:"JetBrains Mono",monospace;font-size:.68rem;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-faint);margin-top:.4rem;}
+
+  footer{
+    position:relative;z-index:1;
+    max-width:var(--max);margin:0 auto;
+    padding:2rem 1.5rem 4rem;
+    border-top:1px solid var(--line);
+    font-size:.9rem;color:var(--ink-faint);
+    text-align:center;
+  }
+  footer a{color:var(--ink-soft);}
+
+  ::selection{background:rgba(240,161,79,0.3);color:#fff;}
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="glow-ring" aria-hidden="true"></div>
+  <div class="kicker">Home Lab · Voice · Mistral</div>
+  <h1>Vibe<em>Pod</em></h1>
+  <p class="dek">Talking to a Mistral Vibe agent through the Apple HomePod that's already sitting on my shelf.</p>
+  <p class="byline">An afternoon hack · 2026 · built in collaboration with <a href="https://claude.ai">Claude</a></p>
+</header>
+
+<div class="wrap">
+
+  <div class="collab">
+    <strong>A note on authorship and attribution:</strong> The whole thing was a back-and-forth with Claude (mostly Opus 4.8): iterative and occasionally messy. I'd describe what I wanted or paste a log, Claude would write the code or dig through source. I'd make an "optimization" which made things worse, Claude would fix it. Sometimes I had to paste an extra log to convince Claude that "No, I did not forget to reload the service." A true team effort right there 😂
+  </div>
+
+  <p>I have a few HomePods around the house and a full, native Apple Home setup — no Home Assistant, no custom hub, just Apple's stuff. I also have a Mistral <em>Vibe</em> Pro yearly subscription I got a while back and mostly forgot about. At this point, the whole "Siri dumb" has been memmed enough. I wanted to somehow integrate the otherwise unused Mistral subcription with the HomePod - mostly to answer general knowledge questions, istead of the infamouns "Here's some results I found online, I can show them if you ask from your phone".</p>
+
+  <p>Then I read Alexis Gallagher's <a href="https://alexisgallagher.com/posts/2026/clawpod-homepod/">ClawPod</a> post — a tiny bridge that lets you talk to an OpenClaw agent through a HomePod. ClawPod is the direct inspiration and structural basis for this; mine just swaps the "brain". Where his routes to OpenClaw, mine routes to the <code>vibe</code> CLI. I'm calling it <strong>VibePod</strong>, because of course I am.</p>
+
+  <h2><span class="num">01</span>What you get</h2>
+
+  <p>You say <em>"Hey Siri, ask Vibe…"</em> (the shortcut should ideally be named something that Siri can easily understand), you ask your question out loud, and a few seconds later the HomePod speaks the answer back in Siri's voice. "What are the top ten cities in Greece, and are any known for wine?" "Quick recipe for a Bermuda rum swizzle?" It answers, conversationally, no screen involved.</p>
+
+  <p>Does it work? Yes. Does it <em>Just Work™</em>? Kinda — and the reasons are the same ones Alexis hit, because they're baked into how Apple's stack works, not into the bridge:</p>
+
+  <ul>
+    <li><strong>Siri's voice.</strong> The reply comes out in Siri's TTS. You can't swap in a fancier voice and route it to the HomePod.</li>
+    <li><strong>Indirect invocation.</strong> You're really asking Siri to run a Shortcut, not talking to the agent directly. Naming matters — pick something phonetically distinct from your contacts and other shortcuts.</li>
+    <li><strong>Latency.</strong> You're paying for text generation plus speech conversion, so it's a beat slower than a native voice assistant.</li>
+    <li><strong>Flakiness.</strong> Getting the HomePod to reliably trigger a Shortcut by voice can feel a tad wobbly. Validate that before building anything else.</li>
+  </ul>
+
+  <p>For one-shot questions — trivia, general knowledge, a quick recipe — it's pretty nice.</p>
+
+  <h2><span class="num">02</span>How it works</h2>
+
+  <p>The shape is lifted straight from ClawPod: the HomePod can't run your code, so it proxies through a Shortcut on your iPhone (via Apple's <em>Personal Content</em> feature), which POSTs to a little server you run at home, which shells out to the LLM and returns text to be spoken.</p>
+
+  <pre class="flow"><code>You
+  │ (voice)
+  ▼
+<b>HomePod / Siri</b>
+  │ (invokes, via Personal Content)
+  ▼
+<b>iOS Shortcut</b>  (runs on your iPhone, not the HomePod)
+  │ (HTTP POST /chat)
+  ▼
+<b>VibePod server</b>  (Python / FastAPI, on my Arch box btw)
+  │ (shells out)
+  ▼
+<b>vibe -p</b>  (Mistral Vibe CLI, programmatic mode)
+  │
+  ▼
+reply text ──► back up the chain ──► HomePod speaks</code></pre>
+
+  <p>The one meaningful difference from ClawPod is the last hop. Where ClawPod calls <code>openclaw agent</code>, VibePod calls <code>vibe -p</code> — Mistral Vibe's programmatic mode. I asked Claude to read through <a href="https://github.com/mistralai/mistral-vibe">Vibe's source</a> to figure out the cleanest way to drive it headlessly, and the nice surprise was <code>--output text</code>: instead of a JSON envelope you have to dig through, stdout <em>is</em> the answer. The server's parsing logic is one line.</p>
+
+  <h2><span class="num">03</span>The build (and a dead end)</h2>
+
+  <p>I didn't start with Vibe. My first instinct was Claude Code. Claude (the Chat version) and I got a working version going quickly, but trying to make it lean ran into a wall: Claude Code's <code>--bare</code> flag, which strips its big tool-loading context, currently doesn't suppor subscription/OAuth auth — it reports "Not logged in" even when you are. In other words, it requires using a pay-per-token API, which was a hard "No" for me. Without the <code>--bare</code> flag, every single query, even something like "Say Hi" consumed ~17,000 tokens - this is because Claude Code's built-in tool definitions loaded evey time it was invoked, even when <code>-p</code> flaf was used. So <code>--bare</code> was off the table, and without it the context tax per query was large.</p>
+
+  <p>That's when we pivoted to Vibe. That worked suprisingly well: programmatic mode is a proper first-class feature (not a shell hack), <code>--output text</code> makes parsing trivial, and auth is dead simple — Vibe reads credentials from <code>~/.vibe/</code>, so once you've logged in there's no token juggling. I asked Claude to write the whole server; it's a FastAPI app of a couple hundred lines, and almost all of it is plumbing the Shortcut already expects.</p>
+
+  <p>One small design choice pivot compared to Alexis' ClawPod: <strong>ending a conversation costs zero tokens.</strong> Instead of asking the model to detect "goodbye" in its reply (and burning a round-trip to do it), the server checks the <em>incoming</em> text against a list of end-phrases first, and if it matches, it returns "Goodbye!" instantly without ever calling the LLM.</p>
+
+  <h2><span class="num">04</span>The token rabbit hole</h2>
+
+  <p>This is the "OK it works, but now I need to optimize it" part. Once everything worked, I got curious about how much each question actually cost, and Claude and I went down a slighly comical hole chasing the number down. There's an old <a href="https://en.wikipedia.org/wiki/Chernomyrdinka">Chernomyrdinka</a> — <em>"we wanted it to be better, but it turned out as always"</em> — definitely applicable here.</p>
+
+  <p>Vibe is a <em>coding</em> agent, so by default every query hauls a big system prompt full of coding instructions plus the schemas for ten tools (bash, edit, grep…) — none of which a HomePod needs to tell you about Greek wine. The journey looked like this:</p>
+
+  <div class="journey">
+    <div class="jrow">
+      <div><div class="label">Default Vibe (coding prompt, medium model, "high" thinking)</div><div class="bar" style="width:40%"></div></div>
+      <div class="tok">2,321</div>
+    </div>
+    <div class="jrow bad">
+      <div><div class="label">After "optimizing" — I dropped a flag and accidentally loaded <em>all ten tools</em> 🙃</div><div class="bar" style="width:100%"></div></div>
+      <div class="tok">5,882</div>
+    </div>
+    <div class="jrow">
+      <div><div class="label">Custom voice system prompt + stripped the extras</div><div class="bar" style="width:30%"></div></div>
+      <div class="tok">1,721</div>
+    </div>
+    <div class="jrow win">
+      <div><div class="label">Switched to the small model, one tool, no thinking</div><div class="bar" style="width:6%"></div></div>
+      <div class="tok">343</div>
+    </div>
+  </div>
+
+  <p>That middle row is the "turned out as always" moment: in trying to slim things down I removed a Web Search restriction and <em>tripled</em> the token count. Thanksully Claude caught it from the session logs, we put the restriction back. An actually meaningful optimization was using a tiny custom system prompt (Vibe lets you drop a Markdown file in <code>~/.vibe/prompts/</code> and point at it — no source edits, survives updates), turning off the coding-agent context sections, and switching from the medium model with reasoning to the small model with thinking off.</p>
+
+  <div class="statline">
+    <div class="stat"><div class="big">343</div><div class="cap">tokens / query</div></div>
+    <div class="stat"><div class="big">~$0.00004</div><div class="cap">cost / query</div></div>
+    <div class="stat"><div class="big">0.8s</div><div class="cap">response time</div></div>
+    <div class="stat"><div class="big">122×</div><div class="cap">cheaper than start</div></div>
+  </div>
+
+  <p>At roughly four-thousandths of a cent per question, I'd have to ask a couple thousand questions to spend a dollar. Remember this is not billed via API, but is using my otherwise mostly idle Vide Pro subscription. It's fast enough to feel snappy through the speaker.</p>
+
+  <h2><span class="num">05</span>Setting it up</h2>
+
+  <p>Three files live in the <a href="https://github.com/SirToffski/vibepod-src">vibepod-src repo</a>: <code>vibepod_server.py</code> (the FastAPI proxy), <code>vibepod.service</code> (a systemd unit so it survives reboots), and <code>voice.md</code> (the lean system prompt). The iOS Shortcut itself is unchanged from <a href="https://github.com/algal/clawpod">ClawPod</a> — just point its URL at your server.</p>
+
+  <h3>1 · Get Vibe running</h3>
+  <p>Install and log in by following <a href="https://docs.mistral.ai/vibe/code/cli/install-setup">Mistral's install &amp; setup guide</a>. (I used <code>uv tool install mistral-vibe</code>, then logged in once so credentials land in <code>~/.vibe/</code>.) The server runs as the same user, so it inherits that login — no API keys to wire up.</p>
+
+  <h3>2 · Run the server</h3>
+  <pre class="term"><code><span class="cmt"># on the box that runs `vibe`, reachable on your LAN</span>
+uv run vibepod_server.py
+<span class="cmt"># sanity check</span>
+curl http://&lt;your-server-ip&gt;:7001/health</code></pre>
+
+  <p>Under the hood, each request becomes roughly:</p>
+  <pre class="term"><code>vibe -p "&lt;your question&gt;" \
+  --output text <span class="cmt"># stdout = the answer</span> \
+  --trust --workdir &lt;per-speaker dir&gt; \
+  --continue <span class="cmt"># resumes that speaker's thread</span> \
+  --max-turns 3</code></pre>
+
+  <h3>3 · Make it lean</h3>
+  <p>Drop <code>voice.md</code> into <code>~/.vibe/prompts/</code>, then set these in the systemd unit. This is the difference between 2,321 tokens and 343:</p>
+  <pre class="term"><code>Environment=<span class="amber">VIBE_SYSTEM_PROMPT_ID</span>=voice
+Environment=<span class="amber">VIBE_ACTIVE_MODEL</span>=devstral-small
+Environment=<span class="amber">VIBE_INCLUDE_PROMPT_DETAIL</span>=false
+Environment=<span class="amber">VIBE_INCLUDE_PROJECT_CONTEXT</span>=false
+Environment=<span class="amber">VIBE_INCLUDE_COMMIT_SIGNATURE</span>=false
+Environment=<span class="amber">VIBEPOD_ENABLED_TOOLS</span>=web_search
+Environment=<span class="amber">VIBEPOD_MAX_TURNS</span>=3</code></pre>
+
+  <p>One nice touch in <code>voice.md</code>: it tells the model to answer from its own training data by default, and only reach for web search if you explicitly say something like "look that up." So casual questions are instant single-turn answers, and you opt into a slower web lookup only when you want one. Full file and a per-line walkthrough are in the repo's README.</p>
+
+  <h2><span class="num">06</span>Was it worth it?</h2>
+
+  <p>For the cost of an afternoon: yup. It turns a device I already own into one more way to reach a capable assistant. Useful when sitting on a couch watching a show and you have a question about an actor or a bit of trivia, etc.</p>
+
+  <p>Alexis put it well in his post, and I agree: this clearly feels like the future, it just hasn't fully shipped yet. You can see the shape of it. Strong world knowledge, cheap inference, voice in and voice out, on hardware that's already on your shelf. Today it's a Rube Goldberg machine of shortcuts and proxies. Eventually it'll just be how the speaker works.</p>
+
+  <p>Until then — VibePod. Built in an afternoon, costs nothing to run, and my barely-used Vibe subscription finally earns its keep.</p>
+
+</div>
+
+<footer>
+  <p><strong>Credits &amp; links:</strong> inspired by and structurally based on <a href="https://alexisgallagher.com/posts/2026/clawpod-homepod/">ClawPod</a> by <a href="https://github.com/algal">Alexis Gallagher</a> (the iOS Shortcut is his). Brain by <a href="https://github.com/mistralai/mistral-vibe">Mistral Vibe</a>. Research, code, and debugging done in collaboration with <a href="https://claude.ai">Claude</a>.</p>
+  <p>Source: <a href="https://github.com/&lt;your-github-username&gt;/vibepod-src">vibepod-src</a> · &copy; 2026</p>
+</footer>
+
+</body>
+</html>
